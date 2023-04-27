@@ -1,0 +1,8 @@
+.vscode/
+bin/
+build/
+lib/
+*.elf
+*.o
+*.S
+*.a
