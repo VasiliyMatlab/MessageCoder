@@ -1,6 +1,7 @@
 .vscode/
 bin/
 build/
+doc/
 lib/
 *.elf
 *.o
