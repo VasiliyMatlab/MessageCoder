@@ -20,7 +20,8 @@ if (LIB)
 endif()
 
 if (EXAMPLE)
-    add_subdirectory(src/example)
+    add_subdirectory(src/client)
+    add_subdirectory(src/server)
 endif()
 
 if (DOC)
