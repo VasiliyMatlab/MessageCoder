@@ -1,11 +1,11 @@
+BINPATH   := bin
 BUILDPATH := build
 DOCPATH   := doc
-LIBPATH   := lib
 
 all: doc
 
 clean:
-	rm -rf $(BUILDPATH) $(LIBPATH) $(DOCPATH)
+	rm -rf $(BINPATH) $(BUILDPATH) $(DOCPATH)
 
 doc:
 	mkdir -p $(DOCPATH)

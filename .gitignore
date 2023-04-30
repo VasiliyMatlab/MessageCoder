@@ -2,7 +2,6 @@
 bin/
 build/
 doc/
-lib/
 *.elf
 *.o
 *.S

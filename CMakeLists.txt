@@ -1,12 +1,23 @@
 cmake_minimum_required(VERSION 3.0.0)
 project(MessageCoder
-        VERSION 1.0.0
         LANGUAGES C)
 
-file(GLOB SRCS src/*.c)
-add_library(mescoder ${SRCS})
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+option(LIB "building lib" ON)
+option(EXAMPLE "building example" OFF)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -O2")
+set(OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
-install(TARGETS mescoder DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+add_compile_options(-Wall -Wextra -O2)
+add_link_options(-Wall -Wextra -O2)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if (LIB)
+    add_subdirectory(src/lib)
+endif()
+
+if (EXAMPLE)
+    add_subdirectory(src/example)
+endif()
