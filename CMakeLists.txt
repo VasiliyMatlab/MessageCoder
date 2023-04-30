@@ -1,9 +1,10 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.15.0)
 project(MessageCoder
         LANGUAGES C)
 
 option(LIB "building lib" ON)
 option(EXAMPLE "building example" OFF)
+option(DOC "building documentation" OFF)
 
 set(OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
@@ -20,4 +21,19 @@ endif()
 
 if (EXAMPLE)
     add_subdirectory(src/example)
+endif()
+
+if (DOC)
+    find_package(Doxygen
+                 REQUIRED dot)
+    if (NOT DOXYGEN_FOUND)
+        message(FATAL_ERROR "Doxygen is needed to build the documentation")
+    endif()
+
+    add_custom_command(COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                       OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/doc/latex/Makefile)
+    add_custom_target(documentation
+                      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/doc/latex/Makefile
+                      COMMAND make -C ${CMAKE_CURRENT_SOURCE_DIR}/doc/latex)
 endif()
