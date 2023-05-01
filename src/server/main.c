@@ -1,17 +1,39 @@
-#include <stdbool.h>
-#include <stdio.h>
-#include <fcntl.h>
+/*
+ * file:        main.c
+ * author:      VasiliyMatlab
+ * version:     1.0
+ * date:        01.05.2023
+ * copyright:   Vasiliy (c) 2023
+ */
+
 #include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
-#define FIFO_NAME   "chanell.fifo"
+#define FIFO_NAME   "chanell.fifo"  ///< Название именнованного канала
+
+// PID текущего процесса
+pid_t pid;
+// Дескриптор именованного канала
+int fd;
+// Код возврата текущего процесса
+int ret = 0;
+// Признак работы программы
+int running = 1;
+
+void signal_handler(int __attribute__((unused)) signalno) {
+    running = 0;
+}
 
 int main(void) {
-    // Узнаем PID текущего процесса
-    pid_t pid = getpid();
-    // Код возврата текущего процесса
-    int ret = 0;
+    // Узнаем PID
+    pid = getpid();
+
+    // Задаем обработчик сигнала
+    signal(SIGPIPE, signal_handler);
 
     // Создаем именованный канал
     if (mkfifo(FIFO_NAME, 0777)) {
@@ -21,7 +43,7 @@ int main(void) {
     fprintf(stdout, "[%d] %s is created\n", pid, FIFO_NAME);
 
     // Открываем канал на запись
-    int fd = open(FIFO_NAME, O_WRONLY);
+    fd = open(FIFO_NAME, O_WRONLY);
     if (fd < 0) {
         perror("open failed");
         ret = errno;
@@ -34,7 +56,7 @@ int main(void) {
 
     // Пишем в канал данные    
     char buf[] = "test_string\n";
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; (i < 10) && running; i++) {
         ssize_t bytes = write(fd, buf, sizeof(buf));
         if (bytes == -1) {
             perror("write failed");
