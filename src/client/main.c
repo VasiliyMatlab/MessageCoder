@@ -1,7 +1,7 @@
 /*
  * file:        main.c
  * author:      VasiliyMatlab
- * version:     1.1
+ * version:     1.2
  * date:        06.05.2023
  * copyright:   Vasiliy (c) 2023
  */
@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,7 +63,11 @@ int main(void) {
             fprintf(stdout, "[%d] The end of transmit is reached\n", pid);
             break;
         }
-        fprintf(stdout, "[%d] Data is read from %s (%ld bytes): %s\n", pid, FIFO_NAME, bytes, buf);
+        fprintf(stdout, "[%d] Data is read from %s (%ld bytes): 0x", pid, FIFO_NAME, bytes);
+        for (uint8_t i = 0; i < bytes; i++) {
+            fprintf(stdout, "%02hhX ", buf[i]);
+        }
+        fprintf(stdout, "\n");
     }
 
     // Закрываем канал
