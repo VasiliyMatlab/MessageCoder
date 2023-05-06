@@ -1,8 +1,8 @@
 /*
  * file:        main.c
  * author:      VasiliyMatlab
- * version:     1.0
- * date:        01.05.2023
+ * version:     1.1
+ * date:        06.05.2023
  * copyright:   Vasiliy (c) 2023
  */
 
@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -19,20 +20,35 @@
 pid_t pid;
 // Дескриптор именованного канала
 int fd;
-// Код возврата текущего процесса
-int ret = 0;
-// Признак работы программы
-int running = 1;
 
 void signal_handler(int __attribute__((unused)) signalno) {
-    running = 0;
+    // Закрываем канал
+    if (close(fd)) {
+        perror("close failed");
+        int ret = errno;
+        if (remove(FIFO_NAME)) {
+            perror("remove failed");
+        }
+        exit(ret);
+    }
+    fprintf(stdout, "[%d] %s is closed\n", pid, FIFO_NAME);
+
+    // Удаляем именнованный канал
+    if (remove(FIFO_NAME)) {
+        perror("remove failed");
+        exit(errno);
+    }
+    fprintf(stdout, "[%d] %s is removed\n", pid, FIFO_NAME);
+    exit(EXIT_SUCCESS);
 }
 
 int main(void) {
     // Узнаем PID
     pid = getpid();
+    // Код возврата текущего процесса
+    int ret = 0;
 
-    // Задаем обработчик сигнала
+    // Задаем обработчик сигналов
     signal(SIGPIPE, signal_handler);
 
     // Создаем именованный канал
@@ -55,15 +71,15 @@ int main(void) {
     fprintf(stdout, "[%d] %s is opened\n", pid, FIFO_NAME);
 
     // Пишем в канал данные    
-    char buf[] = "test_string\n";
-    for (int i = 0; (i < 10) && running; i++) {
+    char buf[] = "test_string";
+    for (int i = 0; i < 10; i++) {
         ssize_t bytes = write(fd, buf, sizeof(buf));
         if (bytes == -1) {
             perror("write failed");
             ret = errno;
             break;
         }
-        fprintf(stdout, "[%d] Data is written to %s (%ld bytes): %s", pid, FIFO_NAME, bytes, buf);
+        fprintf(stdout, "[%d] Data is written to %s (%ld bytes): %s\n", pid, FIFO_NAME, bytes, buf);
         sleep(1);
     }
 
