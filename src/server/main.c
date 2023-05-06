@@ -1,7 +1,7 @@
 /*
  * file:        main.c
  * author:      VasiliyMatlab
- * version:     1.3
+ * version:     1.4
  * date:        06.05.2023
  * copyright:   Vasiliy (c) 2023
  */
@@ -18,10 +18,16 @@
 
 #include <mess_coder.h>
 
-#define MIN_ROWS    4               ///< Минимальное количество строк данных
-#define MAX_ROWS    16              ///< Максимальное количество строк данных
-#define MIN_COLS    8               ///< Минимальное количество столбцов данных
-#define MAX_COLS    64              ///< Максимальное количество столбцов данных
+#define MIN_ROWS    4       ///< Минимальное количество строк данных
+#define MAX_ROWS    16      ///< Максимальное количество строк данных
+#define MIN_COLS    8       ///< Минимальное количество столбцов данных
+#define MAX_COLS    64      ///< Максимальное количество столбцов данных
+#define MIN_MSG     4       ///< Минимальная длина отправляемого сообщения
+#define MAX_MSG     64      ///< Максимальная длина отправляемого сообщения
+
+#define MAX_ENC_COLS    (1 + 2 * MAX_COLS + 1)                      ///< Максимальное количество столбцов закодированных данных
+#define MAX_SPLIT_ROWS  ((MAX_ROWS * MAX_ENC_COLS) / MIN_MSG + 1)   ///< Максимальное количество строк разбитых данных
+
 #define FIFO_NAME   "chanell.fifo"  ///< Название именнованного канала
 
 // PID текущего процесса
@@ -80,13 +86,13 @@ uint8_t generate_data(uint8_t buf[MAX_ROWS][MAX_COLS], uint8_t cols[MAX_ROWS]) {
  * \param[in] buf_in Буфер, откуда берутся данные
  * \param[in] cols_in Количество столбцов в строках исходных данных
  * \param[in,out] buf_out Буфер с закодированными данными
- * \param[in,out] cols_out Количество столюцов в строках закодированных данных
+ * \param[in,out] cols_out Количество столбцов в строках закодированных данных
  * \return 0 в случае успешного выполнения; иначе код ошибки
  */
 int encode_data(const uint8_t rows,
                 const uint8_t buf_in[MAX_ROWS][MAX_COLS],
                 const uint8_t cols_in[MAX_ROWS],
-                uint8_t buf_out[MAX_ROWS][1 + 2*MAX_COLS + 1],
+                uint8_t buf_out[MAX_ROWS][MAX_ENC_COLS],
                 uint8_t cols_out[MAX_ROWS]) {
     for (uint8_t i = 0; i < rows; i++) {
         int size = messcoder_comp_enc_size(buf_in, MAX_COLS);
@@ -96,6 +102,43 @@ int encode_data(const uint8_t rows,
         cols_out[i] = size;
     }
     return 0;
+}
+
+/**
+ * \brief Функция разбиения данных
+ * 
+ * \param[in] rows Количество строк с данными
+ * \param[in] buf_in Буфер, откуда берутся данные
+ * \param[in] cols_in Количество столбцов в строках исходных данных
+ * \param[in,out] buf_out Буфер с разбитыми данными
+ * \param[in,out] cols_out Количество столбцов в строках разбитых данных
+ * \return Количество строк с разбитыми данными
+ */
+uint16_t split_data(const uint8_t rows,
+                    const uint8_t buf_in[MAX_ROWS][MAX_ENC_COLS],
+                    const uint8_t cols_in[MAX_ROWS],
+                    uint8_t buf_out[MAX_SPLIT_ROWS][MAX_MSG],
+                    uint8_t cols_out[MAX_SPLIT_ROWS]) {
+    int16_t total_bytes = 0;
+    for (uint8_t i = 0; i < rows; i++) {
+        total_bytes += cols_in[i];
+    }
+    uint8_t curr_idx = 0;
+    uint8_t curr_row = 0, curr_col = 0;
+    while (total_bytes > 0) {
+        uint8_t curr_msg_size = (rand() % (MAX_MSG - MIN_MSG)) + MIN_MSG;
+        curr_msg_size = (curr_msg_size > total_bytes) ? total_bytes : curr_msg_size;
+        for (uint8_t i = 0; i < curr_msg_size; i++, total_bytes--) {
+            buf_out[curr_idx][i] = buf_in[curr_row][curr_col++];
+            if (curr_col == cols_in[curr_row]) {
+                curr_col = 0;
+                curr_row++;
+            }
+        }
+        cols_out[curr_idx] = curr_msg_size;
+        curr_idx++;
+    }
+    return curr_idx;
 }
 
 /**
@@ -113,6 +156,7 @@ int main(void) {
 
     // Задаем обработчик сигналов
     signal(SIGPIPE, signal_handler);
+    signal(SIGINT,  signal_handler);
 
     // Создаем именованный канал
     if (mkfifo(FIFO_NAME, 0777)) {
@@ -141,15 +185,22 @@ int main(void) {
 
     // Кодирование данных
     uint8_t enc_cols[MAX_ROWS] = {0};
-    uint8_t enc_data[MAX_ROWS][1 + 2*MAX_COLS + 1] = {0};
+    uint8_t enc_data[MAX_ROWS][MAX_ENC_COLS] = {0};
     ret = encode_data(rows, dec_data, dec_cols, enc_data, enc_cols);
     if (ret) {
         fprintf(stderr, "encode failed with code %d\n", ret);
+        goto end_work;
     }
 
+    // Разбиение данных
+    uint8_t spl_cols[MAX_SPLIT_ROWS] = {0};
+    uint8_t spl_data[MAX_SPLIT_ROWS][MAX_MSG] = {0};
+    uint16_t spl_rows = split_data(rows, enc_data, enc_cols, spl_data, spl_cols);
+
     // Пишем в канал данные
-    for (uint8_t i = 0; (i < rows) && (!ret); i++) {
-        ssize_t bytes = write(fd, enc_data[i], enc_cols[i]);
+    fprintf(stdout, "[%d] Total packages %u (messages %u)\n", pid, spl_rows, rows);
+    for (uint8_t i = 0; i < spl_rows; i++) {
+        ssize_t bytes = write(fd, spl_data[i], spl_cols[i]);
         if (bytes == -1) {
             perror("write failed");
             ret = errno;
@@ -157,12 +208,13 @@ int main(void) {
         }
         fprintf(stdout, "[%d] Data is written to %s (%ld bytes): 0x", pid, FIFO_NAME, bytes);
         for (uint8_t j = 0; j < bytes; j++) {
-            fprintf(stdout, "%02hhX ", enc_data[i][j]);
+            fprintf(stdout, "%02hhX ", spl_data[i][j]);
         }
         fprintf(stdout, "\n");
         sleep(1);
     }
 
+end_work:
     // Закрываем канал
     if (close(fd)) {
         perror("close failed");
