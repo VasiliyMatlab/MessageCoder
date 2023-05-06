@@ -1,7 +1,7 @@
 /*
  * file:        main.c
  * author:      VasiliyMatlab
- * version:     1.2
+ * version:     1.3
  * date:        06.05.2023
  * copyright:   Vasiliy (c) 2023
  */
@@ -15,6 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
+
+#include <mess_coder.h>
 
 #define MIN_ROWS    4               ///< Минимальное количество строк данных
 #define MAX_ROWS    16              ///< Максимальное количество строк данных
@@ -72,6 +74,31 @@ uint8_t generate_data(uint8_t buf[MAX_ROWS][MAX_COLS], uint8_t cols[MAX_ROWS]) {
 }
 
 /**
+ * \brief Функция кодирования данных
+ * 
+ * \param[in] rows Количество строк с данными
+ * \param[in] buf_in Буфер, откуда берутся данные
+ * \param[in] cols_in Количество столбцов в строках исходных данных
+ * \param[in,out] buf_out Буфер с закодированными данными
+ * \param[in,out] cols_out Количество столюцов в строках закодированных данных
+ * \return 0 в случае успешного выполнения; иначе код ошибки
+ */
+int encode_data(const uint8_t rows,
+                const uint8_t buf_in[MAX_ROWS][MAX_COLS],
+                const uint8_t cols_in[MAX_ROWS],
+                uint8_t buf_out[MAX_ROWS][1 + 2*MAX_COLS + 1],
+                uint8_t cols_out[MAX_ROWS]) {
+    for (uint8_t i = 0; i < rows; i++) {
+        int size = messcoder_comp_enc_size(buf_in, MAX_COLS);
+        size = messcoder_to_serial(buf_out[i], size, buf_in[i], cols_in[i]);
+        if (size < 0)
+            return size;
+        cols_out[i] = size;
+    }
+    return 0;
+}
+
+/**
  * \brief Функция main
  * 
  * \return Код возврата 
@@ -112,9 +139,17 @@ int main(void) {
     uint8_t dec_data[MAX_ROWS][MAX_COLS] = {0};
     rows = generate_data(dec_data, dec_cols);
 
+    // Кодирование данных
+    uint8_t enc_cols[MAX_ROWS] = {0};
+    uint8_t enc_data[MAX_ROWS][1 + 2*MAX_COLS + 1] = {0};
+    ret = encode_data(rows, dec_data, dec_cols, enc_data, enc_cols);
+    if (ret) {
+        fprintf(stderr, "encode failed with code %d\n", ret);
+    }
+
     // Пишем в канал данные
-    for (uint8_t i = 0; i < rows; i++) {
-        ssize_t bytes = write(fd, dec_data[i], dec_cols[i]);
+    for (uint8_t i = 0; (i < rows) && (!ret); i++) {
+        ssize_t bytes = write(fd, enc_data[i], enc_cols[i]);
         if (bytes == -1) {
             perror("write failed");
             ret = errno;
@@ -122,7 +157,7 @@ int main(void) {
         }
         fprintf(stdout, "[%d] Data is written to %s (%ld bytes): 0x", pid, FIFO_NAME, bytes);
         for (uint8_t j = 0; j < bytes; j++) {
-            fprintf(stdout, "%02hhX ", dec_data[i][j]);
+            fprintf(stdout, "%02hhX ", enc_data[i][j]);
         }
         fprintf(stdout, "\n");
         sleep(1);
