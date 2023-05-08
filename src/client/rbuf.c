@@ -1,12 +1,13 @@
 /*
  * file:        rbuf.c
  * author:      VasiliyMatlab
- * version:     1.0
+ * version:     1.1
  * date:        08.05.2023
  * copyright:   Vasiliy (c) 2023
  */
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "rbuf.h"
 
@@ -37,16 +38,16 @@ void rbuf_dump(struct rbuf *rb) {
 	uint32_t i, bi;
 	
 	if (rb != NULL) {
-		tprintf("rbuf: len %u\r\n", rb->len);
+		fprintf(stdout, "rbuf: len %u\r\n", rb->len);
 		
 		for(i = 0, bi = rb->tail; i < rb->len; i++, bi = RBUF_NEXT(bi)) {
-			tprintf("%02X ", rb->buf[bi]);
+			fprintf(stdout, "%02X ", rb->buf[bi]);
 			if((i & 0x7) == 0x7)
-				tprintf("\r\n");
+				fprintf(stdout, "\r\n");
 		}
 		
 		if((i & 0xF) != 0x8)
-			tprintf("\r\n");
+			fprintf(stdout, "\r\n");
 	}
 }
 
