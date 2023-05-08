@@ -1,13 +1,14 @@
 /*
  * file:        main.c
  * author:      VasiliyMatlab
- * version:     1.3
+ * version:     1.4
  * date:        08.05.2023
  * copyright:   Vasiliy (c) 2023
  */
 
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -19,30 +20,72 @@
 
 #include "rbuf.h"
 
-#define MIN_MSG     8               ///< Минимальная длина принимаемого сообщения
-#define MAX_MSG     64              ///< Максимальная длина принимаемого сообщения
+#define MIN_MSG     8       ///< Минимальная длина принимаемого сообщения
+#define MAX_MSG     64      ///< Максимальная длина принимаемого сообщения
 
 #define MIN_ENC_MSG (1 + MIN_MSG + 1)   ///< Минимальная длина закодированного сообщения
 #define MAX_ENC_NSG (1 + 2*MAX_MSG + 1) ///< Максимальная длина закодированного сообщения
 
-#define FIFO_NAME   "chanell.fifo"  ///< Название именнованного канала
+#define FIFO_NAME   "chanell.fifo"      ///< Название именнованного канала
 
-// PID текущего процесса
+/// PID текущего процесса
 pid_t pid;
-// Дескриптор именованного канала
+/// Дескриптор именованного канала
 int fd;
+/// Название именованного канала
+char fifo_name[32] = FIFO_NAME;
 
+/**
+ * \brief Обработчик сигналов
+ * 
+ * \param[in] signalno Поступивший сигнал
+ */
 void signal_handler(int __attribute__((unused)) signalno) {
     // Закрываем канал
     if (close(fd)) {
         perror("close failed");
         exit(errno);
     }
-    fprintf(stdout, "[%d] %s is closed\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is closed\n", pid, fifo_name);
     exit(EXIT_SUCCESS);
 }
 
-int main(void) {
+/**
+ * \brief Функция вывода справки в стандартный поток вывода
+ * 
+ * \param[in] argv0 Название исполняемого файла
+ */
+void print_usage(const char *argv0) {
+    fprintf(stdout, "Usage: %s [OPTION]\n", argv0);
+    fprintf(stdout, "-h             print this help\n");
+    fprintf(stdout, "-f <fifoname>  set fifo filename\n");
+    exit(EXIT_SUCCESS);
+}
+
+/**
+ * \brief Функция main
+ * 
+ * \param[in] argc Количество принятых аргументов
+ * \param[in] argv Аргументы командной строки
+ * \return Код возврата
+ */
+int main(int argc, char *argv[]) {
+    // Парсим аргументы командной строки
+    int opt;
+    while ((opt = getopt(argc, argv, "hf:")) != -1) {
+        switch (opt) {
+        case 'h':
+            print_usage(argv[0]);
+            break;
+        case 'f':
+            strcpy(fifo_name, optarg);
+            break;
+        default:
+            print_usage(argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     // Узнаем PID текущего процесса
     pid = getpid();
     // Код возврата текущего процесса
@@ -59,12 +102,12 @@ int main(void) {
     }
 
     // Открываем канал на чтение
-    fd = open(FIFO_NAME, O_RDONLY);
+    fd = open(fifo_name, O_RDONLY);
     if (fd < 0) {
         perror("open failed");
         return errno;
     }
-    fprintf(stdout, "[%d] %s is opened\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is opened\n", pid, fifo_name);
 
     // Читаем данные из канала
     uint8_t buf[BUFSIZ] = {0};
@@ -148,8 +191,8 @@ int main(void) {
             }
             msgs++;
 
-            // Печатаем сообщение на экран
-            fprintf(stdout, "[%d] Message is read from %s (%ld bytes): 0x", pid, FIFO_NAME, dec_len);
+            // Печатаем сообщение в стандартный поток вывода
+            fprintf(stdout, "[%d] Message is read from %s (%ld bytes): 0x", pid, fifo_name, dec_len);
             for (uint8_t i = 0; i < dec_len; i++) {
                 fprintf(stdout, "%02hhX ", dec_msg[i]);
             }
@@ -164,7 +207,7 @@ int main(void) {
         perror("close failed");
         return errno;
     }
-    fprintf(stdout, "[%d] %s is closed\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is closed\n", pid, fifo_name);
 
     return ret;
 }

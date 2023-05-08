@@ -1,17 +1,19 @@
 /*
  * file:        main.c
  * author:      VasiliyMatlab
- * version:     1.4
+ * version:     1.5
  * date:        06.05.2023
  * copyright:   Vasiliy (c) 2023
  */
 
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -28,12 +30,14 @@
 #define MAX_ENC_COLS    (1 + 2 * MAX_COLS + 1)                      ///< Максимальное количество столбцов закодированных данных
 #define MAX_SPLIT_ROWS  ((MAX_ROWS * MAX_ENC_COLS) / MIN_MSG + 1)   ///< Максимальное количество строк разбитых данных
 
-#define FIFO_NAME   "chanell.fifo"  ///< Название именнованного канала
+#define FIFO_NAME   "chanell.fifo"  ///< Название именнованного канала по умолчанию
 
-// PID текущего процесса
+/// PID текущего процесса
 pid_t pid;
-// Дескриптор именованного канала
+/// Дескриптор именованного канала
 int fd;
+/// Название именованного канала
+char fifo_name[32] = FIFO_NAME;
 
 /**
  * \brief Обработчик сигналов
@@ -45,19 +49,19 @@ void signal_handler(int __attribute__((unused)) signalno) {
     if (close(fd)) {
         perror("close failed");
         int ret = errno;
-        if (remove(FIFO_NAME)) {
+        if (remove(fifo_name)) {
             perror("remove failed");
         }
         exit(ret);
     }
-    fprintf(stdout, "[%d] %s is closed\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is closed\n", pid, fifo_name);
 
     // Удаляем именнованный канал
-    if (remove(FIFO_NAME)) {
+    if (remove(fifo_name)) {
         perror("remove failed");
         exit(errno);
     }
-    fprintf(stdout, "[%d] %s is removed\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is removed\n", pid, fifo_name);
     exit(EXIT_SUCCESS);
 }
 
@@ -142,11 +146,41 @@ uint16_t split_data(const uint8_t rows,
 }
 
 /**
+ * \brief Функция вывода справки в стандартный поток вывода
+ * 
+ * \param[in] argv0 Название исполняемого файла
+ */
+void print_usage(const char *argv0) {
+    fprintf(stdout, "Usage: %s [OPTION]\n", argv0);
+    fprintf(stdout, "-h             print this help\n");
+    fprintf(stdout, "-f <fifoname>  set fifo filename\n");
+    exit(EXIT_SUCCESS);
+}
+
+/**
  * \brief Функция main
  * 
- * \return Код возврата 
+ * \param[in] argc Количество принятых аргументов
+ * \param[in] argv Аргументы командной строки
+ * \return Код возврата
  */
-int main(void) {
+int main(int argc, char *argv[]) {
+    // Парсим аргументы командной строки
+    int opt;
+    while ((opt = getopt(argc, argv, "hf:")) != -1) {
+        switch (opt) {
+        case 'h':
+            print_usage(argv[0]);
+            break;
+        case 'f':
+            strcpy(fifo_name, optarg);
+            break;
+        default:
+            print_usage(argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     // Узнаем PID
     pid = getpid();
     // Код возврата текущего процесса
@@ -159,23 +193,23 @@ int main(void) {
     signal(SIGINT,  signal_handler);
 
     // Создаем именованный канал
-    if (mkfifo(FIFO_NAME, 0777)) {
+    if (mkfifo(fifo_name, 0777)) {
         perror("mkfifo failed");
         return errno;
     }
-    fprintf(stdout, "[%d] %s is created\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is created\n", pid, fifo_name);
 
     // Открываем канал на запись
-    fd = open(FIFO_NAME, O_WRONLY);
+    fd = open(fifo_name, O_WRONLY);
     if (fd < 0) {
         perror("open failed");
         ret = errno;
-        if (remove(FIFO_NAME)) {
+        if (remove(fifo_name)) {
             perror("remove failed");
         }
         return ret;
     }
-    fprintf(stdout, "[%d] %s is opened\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is opened\n", pid, fifo_name);
 
     // Генерация данных
     uint8_t rows = 0;
@@ -206,7 +240,7 @@ int main(void) {
             ret = errno;
             break;
         }
-        fprintf(stdout, "[%d] Data is written to %s (%ld bytes): 0x", pid, FIFO_NAME, bytes);
+        fprintf(stdout, "[%d] Data is written to %s (%ld bytes): 0x", pid, fifo_name, bytes);
         for (uint8_t j = 0; j < bytes; j++) {
             fprintf(stdout, "%02hhX ", spl_data[i][j]);
         }
@@ -219,19 +253,19 @@ end_work:
     if (close(fd)) {
         perror("close failed");
         ret = errno;
-        if (remove(FIFO_NAME)) {
+        if (remove(fifo_name)) {
             perror("remove failed");
         }
         return ret;
     }
-    fprintf(stdout, "[%d] %s is closed\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is closed\n", pid, fifo_name);
 
     // Удаляем именнованный канал
-    if (remove(FIFO_NAME)) {
+    if (remove(fifo_name)) {
         perror("remove failed");
         return errno;
     }
-    fprintf(stdout, "[%d] %s is removed\n", pid, FIFO_NAME);
+    fprintf(stdout, "[%d] %s is removed\n", pid, fifo_name);
 
     return ret;
 }
